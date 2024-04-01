@@ -1,0 +1,548 @@
+import os
+import datetime
+from datetime import datetime
+from typing import Optional, Dict, List, Any
+
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.future import select
+from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel
+from chainlit import PersistedUser, User, ThreadDict
+from chainlit.data import BaseDataLayer
+from chainlit.element import ElementDict
+from chainlit.step import StepDict
+from chainlit.types import Feedback, Pagination, ThreadFilter
+from literalai import PageInfo
+from literalai import PaginatedResponse
+
+
+class SqlDataLayer(BaseDataLayer):
+    def __init__(self):
+        database_url = os.environ.get('LIT_DATABASE_URL')
+
+        if not database_url:
+            raise EnvironmentError('LIT_DATABASE_URL is not defined in the environment.')
+
+        self.engine = create_async_engine(database_url, echo=True)
+        self.AsyncSession = sessionmaker(
+            self.engine, expire_on_commit=False, class_=AsyncSession
+        )
+
+    async def async_context(self):
+        """
+        Provide an asynchronous context manager for database sessions.
+        This ensures that the session is properly closed after use.
+        """
+        async with self.AsyncSession() as session:
+            async with session.begin():
+                try:
+                    yield session
+                finally:
+                    await session.close()
+
+    async def get_user(self, identifier: str) -> Optional["PersistedUser"]:
+        """
+        Retrieve a user by their identifier.
+
+        :param identifier: The unique identifier of the user.
+        :return: An instance of PersistedUser if found, otherwise None.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(PersistedUserModel).where(PersistedUserModel.identifier == identifier)
+            )
+
+            user_model = result.scalars().first()
+
+            if user_model:
+                return PersistedUser(
+                    id=user_model.id,
+                    identifier=user_model.identifier,
+                    createdAt=user_model.createdAt,
+                    metadata=user_model.metadata
+                )
+
+            return None
+
+    async def create_user(self, user: "User") -> Optional["PersistedUser"]:
+        """
+        Create a new user or update an existing user's metadata.
+
+        :param user: An instance of User containing the user's details.
+        :return: An instance of PersistedUser with the created or updated user's details.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(PersistedUserModel).where(PersistedUserModel.identifier == user.identifier)
+            )
+            user_model = result.scalars().first()
+            if user_model:
+                user_model.metadata = user.metadata
+            else:
+                user_model = PersistedUserModel(
+                    identifier=user.identifier,
+                    createdAt=str(datetime.now(datetime.timezone.utc)),
+                    metadata=user.metadata
+                )
+                session.add(user_model)
+            await session.commit()
+
+            return PersistedUser(
+                id=user_model.id,
+                identifier=user_model.identifier,
+                createdAt=user_model.createdAt,
+                metadata=user_model.metadata
+            )
+
+    async def delete_user_session(self, id: str) -> bool:
+        """
+        Delete a user session by its ID.
+
+        :param id: The ID of the user session to delete.
+        :return: True if the session was successfully deleted, False otherwise.
+        """
+        return await super().delete_user_session(id)
+
+    async def upsert_feedback(self, feedback: Feedback) -> str:
+        """
+        Insert or update feedback for a step.
+
+        :param feedback: An instance of Feedback containing the feedback details.
+        :return: The ID of the inserted or updated feedback.
+        """
+        async with self.async_context() as session:
+            if feedback.id:
+                result = await session.execute(
+                    select(Feedback).where(Feedback.id == feedback.id)
+                )
+                existing_feedback = result.scalars().first()
+                if existing_feedback:
+                    existing_feedback.comment = feedback.comment
+                    existing_feedback.strategy = feedback.strategy
+                    existing_feedback.value = feedback.value
+            else:
+                new_feedback = Feedback(
+                    for_id=feedback.forId,
+                    value=feedback.value,
+                    comment=feedback.comment,
+                    strategy=feedback.strategy,
+                )
+                session.add(new_feedback)
+                await session.commit()
+                return str(new_feedback.id)
+
+            await session.commit()
+            return str(feedback.id)
+
+    async def create_element(self, element_dict: "ElementDict") -> "ElementDict":
+        """
+        Create a new element and persist it to the database.
+
+        :param element_dict: A dictionary containing the element's details.
+        :return: A dictionary with the created element's details.
+        """
+        async with self.async_context() as session:
+            new_element = ElementModel(
+                id=element_dict["id"],
+                thread_id=element_dict["threadId"],
+                type=element_dict["type"],
+                chainlit_key=element_dict.get("chainlitKey"),
+                url=element_dict.get("url"),
+                object_key=element_dict.get("objectKey"),
+                name=element_dict["name"],
+                display=element_dict["display"],
+                size=element_dict.get("size"),
+                language=element_dict.get("language"),
+                mime=element_dict.get("mime"),
+                for_id=element_dict.get("forId"),
+                page=element_dict.get("page"),
+            )
+            session.add(new_element)
+            await session.commit()
+
+            return {
+                "id": new_element.id,
+                "threadId": new_element.thread_id,
+                "type": new_element.type,
+                "chainlitKey": new_element.chainlit_key,
+                "url": new_element.url,
+                "objectKey": new_element.object_key,
+                "name": new_element.name,
+                "display": new_element.display,
+                "size": new_element.size,
+                "language": new_element.language,
+                "mime": new_element.mime,
+                "forId": new_element.for_id,
+                "page": new_element.page,
+            }
+
+    async def get_element(self, thread_id: str, element_id: str) -> Optional["ElementDict"]:
+        """
+        Retrieve an element by its ID and associated thread ID.
+
+        :param thread_id: The ID of the thread associated with the element.
+        :param element_id: The ID of the element to retrieve.
+        :return: A dictionary with the element's details if found, otherwise None.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ElementModel).where(
+                    ElementModel.thread_id == thread_id,
+                    ElementModel.id == element_id
+                )
+            )
+            element = result.scalars().first()
+            if element:
+                return {
+                    "id": element.id,
+                    "threadId": element.thread_id,
+                    "type": element.type,
+                    "chainlitKey": element.chainlit_key,
+                    "url": element.url,
+                    "objectKey": element.object_key,
+                    "name": element.name,
+                    "display": element.display,
+                    "size": element.size,
+                    "language": element.language,
+                    "mime": element.mime,
+                    "forId": element.for_id,
+                    "page": element.page,
+                }
+            return None
+
+    async def delete_element(self, element_id: str) -> bool:
+        """
+        Delete an element by its ID.
+
+        :param element_id: The ID of the element to delete.
+        :return: True if the element was successfully deleted, False otherwise.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ElementModel).where(ElementModel.id == element_id)
+            )
+            element = result.scalars().first()
+            if element:
+                await session.delete(element)
+                await session.commit()
+                return True
+            return False
+
+    async def create_step(self, step_dict: "StepDict") -> "StepDict":
+        """
+        Create a new step and persist it to the database.
+
+        :param step_dict: A dictionary containing the step's details.
+        :return: A dictionary with the created step's details.
+        """
+        async with self.async_context() as session:
+            new_step = StepModel(
+                id=step_dict["id"],
+                thread_id=step_dict["threadId"],
+                name=step_dict["name"],
+                type=step_dict["type"],
+                input=step_dict.get("input"),
+                output=step_dict.get("output"),
+                metadata=step_dict.get("metadata"),
+                created_at=step_dict.get("createdAt"),
+                start_time=step_dict.get("start"),
+                end_time=step_dict.get("end"),
+            )
+            session.add(new_step)
+            await session.commit()
+
+            return {
+                "id": new_step.id,
+                "threadId": new_step.thread_id,
+                "name": new_step.name,
+                "type": new_step.type,
+                "input": new_step.input,
+                "output": new_step.output,
+                "metadata": new_step.metadata,
+                "createdAt": new_step.created_at,
+                "start": new_step.start_time,
+                "end": new_step.end_time,
+            }
+
+    async def update_step(self, step_dict: "StepDict") -> "StepDict":
+        """
+        Update an existing step's details in the database.
+
+        :param step_dict: A dictionary containing the updated step's details.
+        :return: A dictionary with the updated step's details.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(StepModel).where(StepModel.id == step_dict["id"])
+            )
+            step = result.scalars().first()
+            if step:
+                step.name = step_dict["name"]
+                step.type = step_dict["type"]
+                step.input = step_dict.get("input")
+                step.output = step_dict.get("output")
+                step.metadata = step_dict.get("metadata")
+                step.created_at = step_dict.get("createdAt")
+                step.start_time = step_dict.get("start")
+                step.end_time = step_dict.get("end")
+                await session.commit()
+
+                return {
+                    "id": step.id,
+                    "threadId": step.thread_id,
+                    "name": step.name,
+                    "type": step.type,
+                    "input": step.input,
+                    "output": step.output,
+                    "metadata": step.metadata,
+                    "createdAt": step.created_at,
+                    "start": step.start_time,
+                    "end": step.end_time,
+                }
+            else:
+                raise ValueError(f"Step with ID {step_dict['id']} not found")
+
+    async def delete_step(self, step_id: str) -> bool:
+        """
+        Delete a step by its ID.
+
+        :param step_id: The ID of the step to delete.
+        :return: True if the step was successfully deleted, False otherwise.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(StepModel).where(StepModel.id == step_id)
+            )
+            step = result.scalars().first()
+            if step:
+                await session.delete(step)
+                await session.commit()
+                return True
+            return False
+
+    async def get_thread(self, thread_id: str) -> "Optional[ThreadDict]":
+        """
+        Retrieve a thread by its ID, including its associated steps and elements.
+
+        :param thread_id: The ID of the thread to retrieve.
+        :return: A dictionary with the thread's details if found, otherwise None.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ThreadModel).where(ThreadModel.id == thread_id)
+            )
+            thread_model = result.scalars().first()
+            if thread_model:
+                # Retrieve steps for the thread
+                steps_result = await session.execute(
+                    select(StepModel).where(StepModel.thread_id == thread_id)
+                )
+                steps = steps_result.scalars().all()
+
+                # Retrieve elements for the thread
+                elements_result = await session.execute(
+                    select(ElementModel).where(ElementModel.thread_id == thread_id)
+                )
+                elements = elements_result.scalars().all()
+
+                # Retrieve user for the thread
+                user_result = await session.execute(
+                    select(PersistedUserModel).where(PersistedUserModel.id == thread_model.user_id)
+                )
+                user_model = user_result.scalars().first()
+                user_dict = {
+                    "id": user_model.id,
+                    "identifier": user_model.identifier,
+                    "createdAt": user_model.createdAt,
+                    "metadata": user_model.metadata
+                } if user_model else None
+
+                return {
+                    "id": thread_model.id,
+                    "name": thread_model.name,
+                    "createdAt": thread_model.createdAt,
+                    "metadata": thread_model.metadata,
+                    "tags": thread_model.tags,
+                    "user": user_dict,
+                    "steps": [{
+                        "id": step.id,
+                        "threadId": step.thread_id,
+                        "name": step.name,
+                        "type": step.type,
+                        "input": step.input,
+                        "output": step.output,
+                        "metadata": step.metadata,
+                        "createdAt": step.created_at,
+                        "start": step.start_time,
+                        "end": step.end_time,
+                    } for step in steps],
+                    "elements": [{
+                        "id": element.id,
+                        "threadId": element.thread_id,
+                        "type": element.type,
+                        "chainlitKey": element.chainlit_key,
+                        "url": element.url,
+                        "objectKey": element.object_key,
+                        "name": element.name,
+                        "display": element.display,
+                        "size": element.size,
+                        "language": element.language,
+                        "mime": element.mime,
+                        "forId": element.for_id,
+                        "page": element.page,
+                    } for element in elements],
+                }
+            return None
+
+    async def get_thread_author(self, thread_id: str) -> str:
+        """
+        Retrieve the identifier of the author of a thread.
+
+        :param thread_id: The ID of the thread.
+        :return: The identifier of the thread's author.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ThreadModel.user_identifier).where(ThreadModel.id == thread_id)
+            )
+            user_identifier = result.scalar()
+            return user_identifier if user_identifier else ""
+
+    async def delete_thread(self, thread_id: str):
+        """
+        Delete a thread by its ID.
+
+        :param thread_id: The ID of the thread to delete.
+        :return: True if the thread was successfully deleted, False otherwise.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ThreadModel).where(ThreadModel.id == thread_id)
+            )
+            thread = result.scalars().first()
+            if thread:
+                await session.delete(thread)
+                await session.commit()
+                return True
+            return False
+
+    async def list_threads(self, pagination: "Pagination", filters: "ThreadFilter") -> "PaginatedResponse[ThreadDict]":
+        """
+        List threads based on pagination and filter criteria.
+
+        :param pagination: An instance of Pagination containing pagination details.
+        :param filters: An instance of ThreadFilter containing filter criteria.
+        :return: A PaginatedResponse containing a list of threads and page information.
+        """
+        async with self.async_context() as session:
+            query = select(ThreadModel)
+            if filters.userIdentifier:
+                query = query.where(ThreadModel.user_identifier == filters.userIdentifier)
+            if filters.search:
+                query = query.where(ThreadModel.name.ilike(f'%{filters.search}%'))
+            if filters.feedback is not None:
+                # Assuming there is a FeedbackModel with a thread_id and value fields
+                query = query.join(Feedback).where(Feedback.value == filters.feedback)
+
+            query = query.order_by(ThreadModel.createdAt.desc())
+            if pagination.cursor:
+                query = query.where(ThreadModel.id > pagination.cursor)
+            query = query.limit(pagination.first)
+
+            result = await session.execute(query)
+            threads = result.scalars().all()
+
+            # Convert ThreadModel instances to ThreadDict
+            threads_data = []
+            for thread in threads:
+                # Explicitly load steps for the thread
+                steps_result = await session.execute(
+                    select(StepModel).where(StepModel.thread_id == thread.id)
+                )
+                steps = steps_result.scalars().all()
+
+                # Explicitly load elements for the thread
+                elements_result = await session.execute(
+                    select(ElementModel).where(ElementModel.thread_id == thread.id)
+                )
+                elements = elements_result.scalars().all()
+
+                threads_data.append({
+                    "id": thread.id,
+                    "name": thread.name,
+                    "createdAt": thread.createdAt,
+                    "metadata": thread.metadata,
+                    "tags": thread.tags,
+                    "user": {
+                        "id": thread.user.id,
+                        "identifier": thread.user.identifier,
+                        "createdAt": thread.user.createdAt,
+                        "metadata": thread.user.metadata
+                    } if thread.user else None,
+                    # Assuming steps and elements are already loaded or will be lazy loaded
+                    "steps": [{
+                        "id": step.id,
+                        "threadId": step.thread_id,
+                        "name": step.name,
+                        "type": step.type,
+                        "input": step.input,
+                        "output": step.output,
+                        "metadata": step.metadata,
+                        "createdAt": step.created_at,
+                        "start": step.start_time,
+                        "end": step.end_time,
+                    } for step in steps],
+                    "elements": [{
+                        "id": element.id,
+                        "threadId": element.thread_id,
+                        "type": element.type,
+                        "chainlitKey": element.chainlit_key,
+                        "url": element.url,
+                        "objectKey": element.object_key,
+                        "name": element.name,
+                        "display": element.display,
+                        "size": element.size,
+                        "language": element.language,
+                        "mime": element.mime,
+                        "forId": element.for_id,
+                        "page": element.page,
+                    } for element in elements],
+                })
+
+            page_info = PageInfo(
+                hasNextPage=len(threads) == pagination.first,
+                endCursor=threads[-1].id if threads else None
+            ).to_dict()
+
+            return PaginatedResponse(data=threads_data, pageInfo=page_info)
+
+    async def update_thread(self, thread_id: str, name: Optional[str] = None, user_id: Optional[str] = None,
+                            metadata: Optional[Dict] = None, tags: Optional[List[str]] = None):
+        """
+        Update a thread's details in the database.
+
+        :param thread_id: The ID of the thread to update.
+        :param name: The new name of the thread, if provided.
+        :param user_id: The new user ID associated with the thread, if provided.
+        :param metadata: The new metadata for the thread, if provided.
+        :param tags: The new list of tags for the thread, if provided.
+        """
+        async with self.async_context() as session:
+            result = await session.execute(
+                select(ThreadModel).where(ThreadModel.id == thread_id)
+            )
+            thread = result.scalars().first()
+            if not thread:
+                raise ValueError(f"Thread with ID {thread_id} not found")
+
+            if name is not None:
+                thread.name = name
+            if user_id is not None:
+                thread.user_id = user_id
+            if metadata is not None:
+                thread.metadata = metadata
+            if tags is not None:
+                thread.tags = tags
+
+            await session.commit()
+

@@ -42,7 +42,7 @@ class PersistedUserModel(Base):
     id = Column(String, primary_key=True)
     identifier = Column(String, nullable=False)
     createdAt = Column(String, nullable=False)
-    metadata = Column(JSON)  # Using JSON field for metadata
+    metadata_ = Column(JSON)  # Using JSON field for metadata
 
     def __repr__(self):
         return f"<PersistedUser(id='{self.id}', identifier='{self.identifier}')>"
@@ -53,7 +53,7 @@ class Feedback(Base):
 
     id = Column(Integer, primary_key=True)
     for_id = Column(String)
-    value = Column(ENUM(-1, 0, 1, name="feedback_value_enum", create_type=False))
+    value = Column(ENUM('-1', '0', '1', name="feedback_value_enum", create_type=False))
     strategy = Column(String, default='BINARY')
     comment = Column(String, nullable=True)
 
@@ -70,7 +70,7 @@ class ThreadModel(Base):
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
     createdAt = Column(String, nullable=False)
-    metadata = Column(JSON)
+    metadata_ = Column(JSON)
     user_id = Column(String, ForeignKey('users.id'), nullable=False)
     tags = Column(JSON)
 
@@ -93,7 +93,7 @@ class StepModel(Base):
     type = Column(String, nullable=False)
     input = Column(Text)
     output = Column(Text)
-    metadata = Column(JSON)
+    metadata_ = Column(JSON)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     start_time = Column(DateTime)
     end_time = Column(DateTime)

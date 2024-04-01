@@ -20,25 +20,22 @@ from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepMod
 
 class SqlDataLayer(BaseDataLayer):
     def __init__(self):
-        database_url = os.environ.get('LIT_DATABASE_URL')
+        self.database_url = os.environ.get('LIT_DATABASE_URL')
 
-        if not database_url:
+        if not self.database_url:
             raise EnvironmentError('LIT_DATABASE_URL is not defined in the environment.')
 
-        self.engine = create_async_engine(database_url, echo=True)
+        self.engine = create_async_engine(self.database_url, echo=True)
         self.AsyncSession = sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
         )
-        SqlDataLayer.initialize_database(database_url)
 
-    @staticmethod
-    def initialize_database(database_url: str):
+    async def initialize_database(self):
         """
-        Create database tables if they do not exist.
+        Asynchronously create database tables if they do not exist.
         """
-        # Note: This method should be called from a synchronous context
-        with create_engine(database_url).begin() as conn:
-            Base.metadata.create_all(conn)
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     async def async_context(self):
         """
@@ -46,11 +43,14 @@ class SqlDataLayer(BaseDataLayer):
         This ensures that the session is properly closed after use.
         """
         async with self.AsyncSession() as session:
-            async with session.begin():
-                try:
-                    yield session
-                finally:
-                    await session.close()
+            try:
+                yield session
+                await session.commit()
+            except:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
 
     async def get_user(self, identifier: str) -> Optional["PersistedUser"]:
         """
@@ -71,7 +71,7 @@ class SqlDataLayer(BaseDataLayer):
                     id=user_model.id,
                     identifier=user_model.identifier,
                     createdAt=user_model.createdAt,
-                    metadata=user_model.metadata
+                    metadata=user_model.metadata_
                 )
 
             return None
@@ -89,7 +89,7 @@ class SqlDataLayer(BaseDataLayer):
             )
             user_model = result.scalars().first()
             if user_model:
-                user_model.metadata = user.metadata
+                user_model.metadata_ = user.metadata
             else:
                 user_model = PersistedUserModel(
                     identifier=user.identifier,
@@ -103,7 +103,7 @@ class SqlDataLayer(BaseDataLayer):
                 id=user_model.id,
                 identifier=user_model.identifier,
                 createdAt=user_model.createdAt,
-                metadata=user_model.metadata
+                metadata=user_model.metadata_
             )
 
     async def delete_user_session(self, id: str) -> bool:
@@ -270,7 +270,7 @@ class SqlDataLayer(BaseDataLayer):
                 "type": new_step.type,
                 "input": new_step.input,
                 "output": new_step.output,
-                "metadata": new_step.metadata,
+                "metadata": new_step.metadata_,
                 "createdAt": new_step.created_at,
                 "start": new_step.start_time,
                 "end": new_step.end_time,
@@ -293,7 +293,7 @@ class SqlDataLayer(BaseDataLayer):
                 step.type = step_dict["type"]
                 step.input = step_dict.get("input")
                 step.output = step_dict.get("output")
-                step.metadata = step_dict.get("metadata")
+                step.metadata_ = step_dict.get("metadata")
                 step.created_at = step_dict.get("createdAt")
                 step.start_time = step_dict.get("start")
                 step.end_time = step_dict.get("end")
@@ -306,7 +306,7 @@ class SqlDataLayer(BaseDataLayer):
                     "type": step.type,
                     "input": step.input,
                     "output": step.output,
-                    "metadata": step.metadata,
+                    "metadata": step.metadata_,
                     "createdAt": step.created_at,
                     "start": step.start_time,
                     "end": step.end_time,
@@ -366,14 +366,14 @@ class SqlDataLayer(BaseDataLayer):
                     "id": user_model.id,
                     "identifier": user_model.identifier,
                     "createdAt": user_model.createdAt,
-                    "metadata": user_model.metadata
+                    "metadata": user_model.metadata_
                 } if user_model else None
 
                 return {
                     "id": thread_model.id,
                     "name": thread_model.name,
                     "createdAt": thread_model.createdAt,
-                    "metadata": thread_model.metadata,
+                    "metadata": thread_model.metadata_,
                     "tags": thread_model.tags,
                     "user": user_dict,
                     "steps": [{
@@ -383,7 +383,7 @@ class SqlDataLayer(BaseDataLayer):
                         "type": step.type,
                         "input": step.input,
                         "output": step.output,
-                        "metadata": step.metadata,
+                        "metadata": step.metadata_,
                         "createdAt": step.created_at,
                         "start": step.start_time,
                         "end": step.end_time,
@@ -483,13 +483,13 @@ class SqlDataLayer(BaseDataLayer):
                     "id": thread.id,
                     "name": thread.name,
                     "createdAt": thread.createdAt,
-                    "metadata": thread.metadata,
+                    "metadata": thread.metadata_,
                     "tags": thread.tags,
                     "user": {
                         "id": thread.user.id,
                         "identifier": thread.user.identifier,
                         "createdAt": thread.user.createdAt,
-                        "metadata": thread.user.metadata
+                        "metadata": thread.user.metadata_
                     } if thread.user else None,
                     # Assuming steps and elements are already loaded or will be lazy loaded
                     "steps": [{
@@ -499,7 +499,7 @@ class SqlDataLayer(BaseDataLayer):
                         "type": step.type,
                         "input": step.input,
                         "output": step.output,
-                        "metadata": step.metadata,
+                        "metadata": step.metadata_,
                         "createdAt": step.created_at,
                         "start": step.start_time,
                         "end": step.end_time,
@@ -552,7 +552,7 @@ class SqlDataLayer(BaseDataLayer):
             if user_id is not None:
                 thread.user_id = user_id
             if metadata is not None:
-                thread.metadata = metadata
+                thread.metadata_ = metadata
             if tags is not None:
                 thread.tags = tags
 

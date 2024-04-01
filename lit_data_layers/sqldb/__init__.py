@@ -1,12 +1,8 @@
-import os
 import datetime
+import os
 from datetime import datetime
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.future import select
-from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel
 from chainlit import PersistedUser, User, ThreadDict
 from chainlit.data import BaseDataLayer
 from chainlit.element import ElementDict
@@ -14,6 +10,12 @@ from chainlit.step import StepDict
 from chainlit.types import Feedback, Pagination, ThreadFilter
 from literalai import PageInfo
 from literalai import PaginatedResponse
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import sessionmaker
+
+from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel
 
 
 class SqlDataLayer(BaseDataLayer):
@@ -27,6 +29,16 @@ class SqlDataLayer(BaseDataLayer):
         self.AsyncSession = sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
         )
+        SqlDataLayer.initialize_database(database_url)
+
+    @staticmethod
+    def initialize_database(database_url: str):
+        """
+        Create database tables if they do not exist.
+        """
+        # Note: This method should be called from a synchronous context
+        with create_engine(database_url).begin() as conn:
+            Base.metadata.create_all(conn)
 
     async def async_context(self):
         """
@@ -545,4 +557,3 @@ class SqlDataLayer(BaseDataLayer):
                 thread.tags = tags
 
             await session.commit()
-

@@ -4,8 +4,17 @@ Provides
 
 ## Installation
 
+### PostgreSQL
+> Note: Make sure you have `libpq-dev` / `postgresql` installed.
 ```shell
-pip install "lit-data-layers[sqldb]"
+pip install "lit-data-layers[postgres]"
+export LIT_DATABASE_URL=postgresql+asyncpg://user:pass@localhost/test
+```
+
+### SQLite
+```shell
+pip install "lit-data-layers[sqlite]"
+export LIT_DATABASE_URL=sqlite+aiosqlite:///db.sqlite3
 ```
 
 ## Usage

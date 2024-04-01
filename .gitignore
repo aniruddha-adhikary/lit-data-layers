@@ -282,3 +282,4 @@ cython_debug/
 #.idea/
 
 .aider*
+app.py

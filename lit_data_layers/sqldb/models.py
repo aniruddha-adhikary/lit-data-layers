@@ -61,7 +61,7 @@ class Feedback(Base):
         return f"<Feedback(id={self.id}, for_id='{self.for_id}')>"
 
     # Relationship to StepModel
-    step = relationship("StepModel", back_populates="feedback")
+    # step = relationship("StepModel", back_populates="feedback")
 
 
 class ThreadModel(Base):
@@ -81,7 +81,7 @@ class ThreadModel(Base):
         return f"<ThreadModel(id='{self.id}', name='{self.name}')>"
 
 
-PersistedUserModel.threads = relationship("ThreadModel", order_by=ThreadModel.id, back_populates="user")
+# PersistedUserModel.threads = relationship("ThreadModel", order_by=ThreadModel.id, back_populates="user")
 
 
 class StepModel(Base):

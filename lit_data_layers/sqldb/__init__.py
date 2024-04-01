@@ -43,14 +43,7 @@ class SqlDataLayer(BaseDataLayer):
         This ensures that the session is properly closed after use.
         """
         async with self.AsyncSession() as session:
-            try:
-                yield session
-                await session.commit()
-            except:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
+            return session.begin
 
     async def get_user(self, identifier: str) -> Optional["PersistedUser"]:
         """
@@ -59,7 +52,7 @@ class SqlDataLayer(BaseDataLayer):
         :param identifier: The unique identifier of the user.
         :return: An instance of PersistedUser if found, otherwise None.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(PersistedUserModel).where(PersistedUserModel.identifier == identifier)
             )
@@ -83,7 +76,7 @@ class SqlDataLayer(BaseDataLayer):
         :param user: An instance of User containing the user's details.
         :return: An instance of PersistedUser with the created or updated user's details.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(PersistedUserModel).where(PersistedUserModel.identifier == user.identifier)
             )
@@ -122,7 +115,7 @@ class SqlDataLayer(BaseDataLayer):
         :param feedback: An instance of Feedback containing the feedback details.
         :return: The ID of the inserted or updated feedback.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             if feedback.id:
                 result = await session.execute(
                     select(Feedback).where(Feedback.id == feedback.id)
@@ -153,7 +146,7 @@ class SqlDataLayer(BaseDataLayer):
         :param element_dict: A dictionary containing the element's details.
         :return: A dictionary with the created element's details.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             new_element = ElementModel(
                 id=element_dict["id"],
                 thread_id=element_dict["threadId"],
@@ -196,7 +189,7 @@ class SqlDataLayer(BaseDataLayer):
         :param element_id: The ID of the element to retrieve.
         :return: A dictionary with the element's details if found, otherwise None.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ElementModel).where(
                     ElementModel.thread_id == thread_id,
@@ -229,7 +222,7 @@ class SqlDataLayer(BaseDataLayer):
         :param element_id: The ID of the element to delete.
         :return: True if the element was successfully deleted, False otherwise.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ElementModel).where(ElementModel.id == element_id)
             )
@@ -247,7 +240,12 @@ class SqlDataLayer(BaseDataLayer):
         :param step_dict: A dictionary containing the step's details.
         :return: A dictionary with the created step's details.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
+            # Convert string timestamps to datetime objects
+            created_at = datetime.fromisoformat(step_dict.get("createdAt").replace("Z", "+00:00")) if step_dict.get("createdAt") else None
+            start_time = datetime.fromisoformat(step_dict.get("start").replace("Z", "+00:00")) if step_dict.get("start") else None
+            end_time = datetime.fromisoformat(step_dict.get("end").replace("Z", "+00:00")) if step_dict.get("end") else None
+
             new_step = StepModel(
                 id=step_dict["id"],
                 thread_id=step_dict["threadId"],
@@ -255,10 +253,10 @@ class SqlDataLayer(BaseDataLayer):
                 type=step_dict["type"],
                 input=step_dict.get("input"),
                 output=step_dict.get("output"),
-                metadata=step_dict.get("metadata"),
-                created_at=step_dict.get("createdAt"),
-                start_time=step_dict.get("start"),
-                end_time=step_dict.get("end"),
+                metadata_=step_dict.get("metadata"),
+                created_at=created_at,
+                start_time=start_time,
+                end_time=end_time,
             )
             session.add(new_step)
             await session.commit()
@@ -283,7 +281,7 @@ class SqlDataLayer(BaseDataLayer):
         :param step_dict: A dictionary containing the updated step's details.
         :return: A dictionary with the updated step's details.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(StepModel).where(StepModel.id == step_dict["id"])
             )
@@ -321,7 +319,7 @@ class SqlDataLayer(BaseDataLayer):
         :param step_id: The ID of the step to delete.
         :return: True if the step was successfully deleted, False otherwise.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(StepModel).where(StepModel.id == step_id)
             )
@@ -339,7 +337,7 @@ class SqlDataLayer(BaseDataLayer):
         :param thread_id: The ID of the thread to retrieve.
         :return: A dictionary with the thread's details if found, otherwise None.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ThreadModel).where(ThreadModel.id == thread_id)
             )
@@ -413,7 +411,7 @@ class SqlDataLayer(BaseDataLayer):
         :param thread_id: The ID of the thread.
         :return: The identifier of the thread's author.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ThreadModel.user_identifier).where(ThreadModel.id == thread_id)
             )
@@ -427,7 +425,7 @@ class SqlDataLayer(BaseDataLayer):
         :param thread_id: The ID of the thread to delete.
         :return: True if the thread was successfully deleted, False otherwise.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ThreadModel).where(ThreadModel.id == thread_id)
             )
@@ -446,7 +444,7 @@ class SqlDataLayer(BaseDataLayer):
         :param filters: An instance of ThreadFilter containing filter criteria.
         :return: A PaginatedResponse containing a list of threads and page information.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             query = select(ThreadModel)
             if filters.userIdentifier:
                 query = query.where(ThreadModel.user_identifier == filters.userIdentifier)
@@ -539,7 +537,7 @@ class SqlDataLayer(BaseDataLayer):
         :param metadata: The new metadata for the thread, if provided.
         :param tags: The new list of tags for the thread, if provided.
         """
-        async with self.async_context() as session:
+        async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ThreadModel).where(ThreadModel.id == thread_id)
             )

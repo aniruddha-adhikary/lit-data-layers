@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Column, String, Boolean, Integer
+from sqlalchemy import Column, String, Boolean, Integer, func
 from sqlalchemy import DateTime, Text
 from sqlalchemy import ForeignKey
 from sqlalchemy import JSON
@@ -68,10 +68,10 @@ class ThreadModel(Base):
     __tablename__ = 'threads'
 
     id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
+    name = Column(String, nullable=True)
     createdAt = Column(String, nullable=False)
     metadata_ = Column(JSON)
-    user_id = Column(String, ForeignKey('users.id'), nullable=False)
+    user_id = Column(String, ForeignKey('users.id'), nullable=True)
     tags = Column(JSON)
 
     # Relationship to PersistedUserModel

@@ -1,6 +1,6 @@
 import datetime
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
 from chainlit import PersistedUser, User, ThreadDict
@@ -10,7 +10,6 @@ from chainlit.step import StepDict
 from chainlit.types import Feedback, Pagination, ThreadFilter
 from literalai import PageInfo
 from literalai import PaginatedResponse
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker
@@ -242,9 +241,12 @@ class SqlDataLayer(BaseDataLayer):
         """
         async with self.AsyncSession() as session:
             # Convert string timestamps to datetime objects
-            created_at = datetime.fromisoformat(step_dict.get("createdAt").replace("Z", "+00:00")) if step_dict.get("createdAt") else None
-            start_time = datetime.fromisoformat(step_dict.get("start").replace("Z", "+00:00")) if step_dict.get("start") else None
-            end_time = datetime.fromisoformat(step_dict.get("end").replace("Z", "+00:00")) if step_dict.get("end") else None
+            created_at = datetime.fromisoformat(step_dict.get("createdAt").replace("Z", "+00:00")) if step_dict.get(
+                "createdAt") else None
+            start_time = datetime.fromisoformat(step_dict.get("start").replace("Z", "+00:00")) if step_dict.get(
+                "start") else None
+            end_time = datetime.fromisoformat(step_dict.get("end").replace("Z", "+00:00")) if step_dict.get(
+                "end") else None
 
             new_step = StepModel(
                 id=step_dict["id"],
@@ -254,9 +256,9 @@ class SqlDataLayer(BaseDataLayer):
                 input=step_dict.get("input"),
                 output=step_dict.get("output"),
                 metadata_=step_dict.get("metadata"),
-                created_at=created_at,
-                start_time=start_time,
-                end_time=end_time,
+                created_at=datetime.utcnow(),
+                start_time=datetime.utcnow(),
+                end_time=None,
             )
             session.add(new_step)
             await session.commit()
@@ -292,9 +294,13 @@ class SqlDataLayer(BaseDataLayer):
                 step.input = step_dict.get("input")
                 step.output = step_dict.get("output")
                 step.metadata_ = step_dict.get("metadata")
-                step.created_at = step_dict.get("createdAt")
-                step.start_time = step_dict.get("start")
-                step.end_time = step_dict.get("end")
+                step.created_at = datetime.fromisoformat(
+                    step_dict.get("createdAt").replace("Z", "+00:00")) if step_dict.get(
+                    "createdAt") else step.created_at
+                step.start_time = datetime.fromisoformat(
+                    step_dict.get("start").replace("Z", "+00:00")) if step_dict.get("start") else step.start_time
+                step.end_time = datetime.fromisoformat(step_dict.get("end").replace("Z", "+00:00")) if step_dict.get(
+                    "end") else step.end_time
                 await session.commit()
 
                 return {
@@ -537,13 +543,18 @@ class SqlDataLayer(BaseDataLayer):
         :param metadata: The new metadata for the thread, if provided.
         :param tags: The new list of tags for the thread, if provided.
         """
+        print('update_thread', thread_id, name, user_id, metadata, tags)
         async with self.AsyncSession() as session:
             result = await session.execute(
                 select(ThreadModel).where(ThreadModel.id == thread_id)
             )
             thread = result.scalars().first()
             if not thread:
-                raise ValueError(f"Thread with ID {thread_id} not found")
+                thread = ThreadModel(
+                    id=thread_id,
+                    name=name,
+                    createdAt=datetime.now(timezone.utc)
+                )
 
             if name is not None:
                 thread.name = name
@@ -554,4 +565,5 @@ class SqlDataLayer(BaseDataLayer):
             if tags is not None:
                 thread.tags = tags
 
+            session.add(thread)
             await session.commit()

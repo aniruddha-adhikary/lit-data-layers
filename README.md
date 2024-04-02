@@ -1,6 +1,7 @@
 # lit-data-layers
 
-Provides
+Provides [Custom Data Layer](https://docs.chainlit.io/data-persistence/custom) for Chainlit apps.
+Supports multiple databases and data stores.
 
 ## Installation
 

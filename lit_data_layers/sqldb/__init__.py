@@ -1,5 +1,7 @@
 import datetime
 import os
+import pdb
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
@@ -12,7 +14,7 @@ from literalai import PageInfo
 from literalai import PaginatedResponse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel
 
@@ -84,8 +86,9 @@ class SqlDataLayer(BaseDataLayer):
                 user_model.metadata_ = user.metadata
             else:
                 user_model = PersistedUserModel(
+                    id=str(uuid.uuid4()),
                     identifier=user.identifier,
-                    createdAt=str(datetime.now(datetime.timezone.utc)),
+                    createdAt=str(datetime.now(timezone.utc)),
                     metadata=user.metadata
                 )
                 session.add(user_model)
@@ -388,9 +391,9 @@ class SqlDataLayer(BaseDataLayer):
                         "input": step.input,
                         "output": step.output,
                         "metadata": step.metadata_,
-                        "createdAt": step.created_at,
-                        "start": step.start_time,
-                        "end": step.end_time,
+                        "createdAt": step.created_at.isoformat() if step.created_at else None,
+                        "start": step.start_time.isoformat() if step.start_time else None,
+                        "end": step.end_time.isoformat() if step.end_time else None,
                     } for step in steps],
                     "elements": [{
                         "id": element.id,
@@ -419,9 +422,9 @@ class SqlDataLayer(BaseDataLayer):
         """
         async with self.AsyncSession() as session:
             result = await session.execute(
-                select(ThreadModel.user_identifier).where(ThreadModel.id == thread_id)
+                select(PersistedUserModel.identifier).join(ThreadModel).where(ThreadModel.id == thread_id)
             )
-            user_identifier = result.scalar()
+            user_identifier = result.scalars().first()
             return user_identifier if user_identifier else ""
 
     async def delete_thread(self, thread_id: str):
@@ -451,9 +454,9 @@ class SqlDataLayer(BaseDataLayer):
         :return: A PaginatedResponse containing a list of threads and page information.
         """
         async with self.AsyncSession() as session:
-            query = select(ThreadModel)
+            query = select(ThreadModel).options(selectinload(ThreadModel.user)).join(PersistedUserModel)
             if filters.userIdentifier:
-                query = query.where(ThreadModel.user_identifier == filters.userIdentifier)
+                query = query.where(PersistedUserModel.identifier == filters.userIdentifier)
             if filters.search:
                 query = query.where(ThreadModel.name.ilike(f'%{filters.search}%'))
             if filters.feedback is not None:
@@ -494,8 +497,7 @@ class SqlDataLayer(BaseDataLayer):
                         "identifier": thread.user.identifier,
                         "createdAt": thread.user.createdAt,
                         "metadata": thread.user.metadata_
-                    } if thread.user else None,
-                    # Assuming steps and elements are already loaded or will be lazy loaded
+                    },
                     "steps": [{
                         "id": step.id,
                         "threadId": step.thread_id,
@@ -504,9 +506,9 @@ class SqlDataLayer(BaseDataLayer):
                         "input": step.input,
                         "output": step.output,
                         "metadata": step.metadata_,
-                        "createdAt": step.created_at,
-                        "start": step.start_time,
-                        "end": step.end_time,
+                        "createdAt": step.created_at.isoformat() if step.created_at else None,
+                        "start": step.start_time.isoformat() if step.start_time else None,
+                        "end": step.end_time.isoformat() if step.end_time else None,
                     } for step in steps],
                     "elements": [{
                         "id": element.id,
@@ -530,7 +532,9 @@ class SqlDataLayer(BaseDataLayer):
                 endCursor=threads[-1].id if threads else None
             ).to_dict()
 
-            return PaginatedResponse(data=threads_data, pageInfo=page_info)
+            response = PaginatedResponse(data=threads_data, pageInfo=page_info)
+            print(response)
+            return response
 
     async def update_thread(self, thread_id: str, name: Optional[str] = None, user_id: Optional[str] = None,
                             metadata: Optional[Dict] = None, tags: Optional[List[str]] = None):

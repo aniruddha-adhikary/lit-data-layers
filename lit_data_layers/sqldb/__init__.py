@@ -1,6 +1,5 @@
 import datetime
 import os
-import pdb
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
@@ -12,11 +11,12 @@ from chainlit.step import StepDict
 from chainlit.types import Feedback, Pagination, ThreadFilter
 from literalai import PageInfo
 from literalai import PaginatedResponse
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker, selectinload
 
-from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel
+from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepModel, Feedback as FeedbackModel
 
 
 class SqlDataLayer(BaseDataLayer):
@@ -117,18 +117,22 @@ class SqlDataLayer(BaseDataLayer):
         :param feedback: An instance of Feedback containing the feedback details.
         :return: The ID of the inserted or updated feedback.
         """
-        async with self.AsyncSession() as session:
-            if feedback.id:
-                result = await session.execute(
-                    select(Feedback).where(Feedback.id == feedback.id)
+        if feedback.id:
+            async with self.AsyncSession() as session:
+                await session.execute(
+                    update(FeedbackModel).
+                    where(FeedbackModel.id == feedback.id).
+                    values(
+                        comment=feedback.comment,
+                        strategy=feedback.strategy,
+                        value=feedback.value
+                    )
                 )
-                existing_feedback = result.scalars().first()
-                if existing_feedback:
-                    existing_feedback.comment = feedback.comment
-                    existing_feedback.strategy = feedback.strategy
-                    existing_feedback.value = feedback.value
-            else:
-                new_feedback = Feedback(
+                await session.commit()
+            return feedback.id
+        else:
+            async with self.AsyncSession() as session:
+                new_feedback = FeedbackModel(
                     for_id=feedback.forId,
                     value=feedback.value,
                     comment=feedback.comment,
@@ -137,9 +141,6 @@ class SqlDataLayer(BaseDataLayer):
                 session.add(new_feedback)
                 await session.commit()
                 return str(new_feedback.id)
-
-            await session.commit()
-            return str(feedback.id)
 
     async def create_element(self, element_dict: "ElementDict") -> "ElementDict":
         """
@@ -461,7 +462,7 @@ class SqlDataLayer(BaseDataLayer):
                 query = query.where(ThreadModel.name.ilike(f'%{filters.search}%'))
             if filters.feedback is not None:
                 # Assuming there is a FeedbackModel with a thread_id and value fields
-                query = query.join(Feedback).where(Feedback.value == filters.feedback)
+                query = query.join(FeedbackModel).where(FeedbackModel.value == filters.feedback)
 
             query = query.order_by(ThreadModel.createdAt.desc())
             if pagination.cursor:

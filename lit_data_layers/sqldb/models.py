@@ -53,7 +53,7 @@ class Feedback(Base):
 
     id = Column(Integer, primary_key=True)
     for_id = Column(String)
-    value = Column(ENUM('-1', '0', '1', name="feedback_value_enum", create_type=False))
+    value = Column(String)
     strategy = Column(String, default='BINARY')
     comment = Column(String, nullable=True)
 

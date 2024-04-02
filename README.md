@@ -39,7 +39,7 @@ Features that have been **tested**.
 | get_user            	 | ✅	       | 	            |
 | create_user         	 | 	        | 	            |
 | delete_user_session 	 | 	        | 	            |
-| upsert_feedback     	 | 	        | 	            |
+| upsert_feedback     	 | ✅	       | 	            |
 | create_element      	 | 	        | 	            |
 | get_element         	 | 	        | 	            |
 | delete_element      	 | 	        | 	            |

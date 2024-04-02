@@ -28,9 +28,12 @@ class ElementModel(Base):
     mime = Column(String)
     content = Column(String)
     page = Column(Integer)
-    thread_id = Column(String)
+    thread_id = Column(String, ForeignKey('threads.id'), nullable=False)
     persisted = Column(Boolean, default=False)
     updatable = Column(Boolean, default=False)
+
+    # Relationships
+    thread = relationship("ThreadModel", back_populates="elements")
 
     def __repr__(self):
         return f"<ElementModel(id='{self.id}'>"
@@ -74,8 +77,10 @@ class ThreadModel(Base):
     user_id = Column(String, ForeignKey('users.id'), nullable=True)
     tags = Column(JSON)
 
-    # Relationship to PersistedUserModel
+    # Relationships
     user = relationship("PersistedUserModel", backref="threads")
+    elements = relationship("ElementModel", back_populates="thread", cascade="all, delete, delete-orphan")
+    steps = relationship("StepModel", back_populates="thread", cascade="all, delete, delete-orphan")
 
     def __repr__(self):
         return f"<ThreadModel(id='{self.id}', name='{self.name}')>"
@@ -103,6 +108,3 @@ class StepModel(Base):
 
     def __repr__(self):
         return f"<StepModel(id='{self.id}', name='{self.name}', type='{self.type}')>"
-
-
-ThreadModel.steps = relationship("StepModel", order_by=StepModel.id, back_populates="thread")

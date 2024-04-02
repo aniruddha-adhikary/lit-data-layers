@@ -48,6 +48,6 @@ Features that have been **tested**.
 | delete_step         	 | 	        | 	            |
 | get_thread          	 | ✅      	 | 	            |
 | get_thread_author   	 | ✅	       | 	            |
-| delete_thread       	 | 	        | 	            |
+| delete_thread       	 | ✅	       | 	            |
 | list_threads        	 | ✅	       | 	            |
 | update_thread       	 | ✅	       | 	            |

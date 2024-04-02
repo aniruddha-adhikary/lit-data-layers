@@ -36,7 +36,7 @@ Features that have been **tested**.
 
 | Method              	 | SQLite 	 | PostgreSQL 	 |
 |-----------------------|----------|--------------|
-| get_user            	 | 	        | 	            |
+| get_user            	 | ✅	       | 	            |
 | create_user         	 | 	        | 	            |
 | delete_user_session 	 | 	        | 	            |
 | upsert_feedback     	 | 	        | 	            |
@@ -47,7 +47,7 @@ Features that have been **tested**.
 | update_step         	 | 	        | 	            |
 | delete_step         	 | 	        | 	            |
 | get_thread          	 | ✅      	 | 	            |
-| get_thread_author   	 | 	        | 	            |
+| get_thread_author   	 | ✅	       | 	            |
 | delete_thread       	 | 	        | 	            |
-| list_threads        	 | 	        | 	            |
-| update_thread       	 | 	        | 	            |
+| list_threads        	 | ✅	       | 	            |
+| update_thread       	 | ✅	       | 	            |

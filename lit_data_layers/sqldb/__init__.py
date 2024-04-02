@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
 from chainlit import PersistedUser, User, ThreadDict
-from chainlit.data import BaseDataLayer
+from chainlit.data import BaseDataLayer, queue_until_user_message
 from chainlit.element import ElementDict
 from chainlit.step import StepDict
 from chainlit.types import Feedback, Pagination, ThreadFilter
@@ -142,6 +142,7 @@ class SqlDataLayer(BaseDataLayer):
                 await session.commit()
                 return str(new_feedback.id)
 
+    @queue_until_user_message()
     async def create_element(self, element_dict: "ElementDict") -> "ElementDict":
         """
         Create a new element and persist it to the database.
@@ -218,6 +219,7 @@ class SqlDataLayer(BaseDataLayer):
                 }
             return None
 
+    @queue_until_user_message()
     async def delete_element(self, element_id: str) -> bool:
         """
         Delete an element by its ID.
@@ -236,6 +238,7 @@ class SqlDataLayer(BaseDataLayer):
                 return True
             return False
 
+    @queue_until_user_message()
     async def create_step(self, step_dict: "StepDict") -> "StepDict":
         """
         Create a new step and persist it to the database.
@@ -280,6 +283,7 @@ class SqlDataLayer(BaseDataLayer):
                 "end": new_step.end_time,
             }
 
+    @queue_until_user_message()
     async def update_step(self, step_dict: "StepDict") -> "StepDict":
         """
         Update an existing step's details in the database.
@@ -322,6 +326,7 @@ class SqlDataLayer(BaseDataLayer):
             else:
                 raise ValueError(f"Step with ID {step_dict['id']} not found")
 
+    @queue_until_user_message()
     async def delete_step(self, step_id: str) -> bool:
         """
         Delete a step by its ID.

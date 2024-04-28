@@ -468,8 +468,7 @@ class SqlDataLayer(BaseDataLayer):
             if filters.search:
                 query = query.where(ThreadModel.name.ilike(f'%{filters.search}%'))
             if filters.feedback is not None:
-                # Assuming there is a FeedbackModel with a thread_id and value fields
-                query = query.join(FeedbackModel).where(FeedbackModel.value == filters.feedback)
+                raise NotImplementedError("This feature is not implemented yet.")
 
             query = query.order_by(ThreadModel.createdAt.desc())
             if pagination.cursor:

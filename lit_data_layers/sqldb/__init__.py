@@ -64,14 +64,13 @@ class SqlDataLayer(BaseDataLayer):
                 return PersistedUser(
                     id=user_model.id,
                     identifier=user_model.identifier,
-                    createdAt=user_model.createdAt,
-                    metadata=user_model.metadata_
+                    createdAt=str(user_model.createdAt),
+                    metadata=user_model.metadata_ or {}
                 )
 
-            else:
-                return self.create_user(
-                    user=User(identifier=identifier)
-                )
+        return await self.create_user(
+            user=User(identifier=identifier)
+        )
 
     async def create_user(self, user: "User") -> Optional["PersistedUser"]:
         """
@@ -91,7 +90,7 @@ class SqlDataLayer(BaseDataLayer):
                 user_model = PersistedUserModel(
                     id=str(uuid.uuid4()),
                     identifier=user.identifier,
-                    createdAt=str(datetime.now(timezone.utc)),
+                    createdAt=datetime.now(timezone.utc),
                     metadata=user.metadata
                 )
                 session.add(user_model)
@@ -100,7 +99,7 @@ class SqlDataLayer(BaseDataLayer):
             return PersistedUser(
                 id=user_model.id,
                 identifier=user_model.identifier,
-                createdAt=user_model.createdAt,
+                createdAt=str(user_model.createdAt),
                 metadata=user_model.metadata_
             )
 
@@ -127,7 +126,7 @@ class SqlDataLayer(BaseDataLayer):
                     where(FeedbackModel.id == feedback.id).
                     values(
                         comment=feedback.comment,
-                        value=feedback.value
+                        value=str(feedback.value)
                     )
                 )
                 await session.commit()
@@ -136,7 +135,7 @@ class SqlDataLayer(BaseDataLayer):
             async with self.AsyncSession() as session:
                 new_feedback = FeedbackModel(
                     for_id=feedback.forId,
-                    value=feedback.value,
+                    value=str(feedback.value),
                     comment=feedback.comment,
                 )
                 session.add(new_feedback)
@@ -265,8 +264,8 @@ class SqlDataLayer(BaseDataLayer):
                 input=step_dict.get("input"),
                 output=step_dict.get("output"),
                 metadata_=step_dict.get("metadata"),
-                created_at=datetime.utcnow(),
-                start_time=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                start_time=datetime.now(timezone.utc),
                 end_time=None,
             )
             session.add(new_step)
@@ -280,9 +279,9 @@ class SqlDataLayer(BaseDataLayer):
                 "input": new_step.input,
                 "output": new_step.output,
                 "metadata": new_step.metadata_,
-                "createdAt": new_step.created_at,
-                "start": new_step.start_time,
-                "end": new_step.end_time,
+                "createdAt": date_serialize(new_step.created_at),
+                "start": date_serialize(new_step.start_time),
+                "end": date_serialize(new_step.end_time),
             }
 
     @queue_until_user_message()
@@ -321,9 +320,9 @@ class SqlDataLayer(BaseDataLayer):
                     "input": step.input,
                     "output": step.output,
                     "metadata": step.metadata_,
-                    "createdAt": step.created_at,
-                    "start": step.start_time,
-                    "end": step.end_time,
+                    "createdAt": date_serialize(step.created_at),
+                    "start": date_serialize(step.start_time),
+                    "end": date_serialize(step.end_time),
                 }
             else:
                 raise ValueError(f"Step with ID {step_dict['id']} not found")
@@ -380,14 +379,14 @@ class SqlDataLayer(BaseDataLayer):
                 user_dict = {
                     "id": user_model.id,
                     "identifier": user_model.identifier,
-                    "createdAt": user_model.createdAt,
+                    "createdAt": user_model.createdAt.isoformat() if thread_model.createdAt else None,
                     "metadata": user_model.metadata_
                 } if user_model else None
 
                 return {
                     "id": thread_model.id,
                     "name": thread_model.name,
-                    "createdAt": thread_model.createdAt,
+                    "createdAt": date_serialize(thread_model.createdAt),
                     "metadata": thread_model.metadata_,
                     "tags": thread_model.tags,
                     "user": user_dict,
@@ -400,9 +399,9 @@ class SqlDataLayer(BaseDataLayer):
                         "input": step.input,
                         "output": step.output,
                         "metadata": step.metadata_,
-                        "createdAt": step.created_at.isoformat() if step.created_at else None,
-                        "start": step.start_time.isoformat() if step.start_time else None,
-                        "end": step.end_time.isoformat() if step.end_time else None,
+                        "createdAt": date_serialize(step.created_at),
+                        "start": date_serialize(step.start_time),
+                        "end": date_serialize(step.end_time),
                     } for step in steps],
                     "elements": [{
                         "id": element.id,
@@ -498,13 +497,13 @@ class SqlDataLayer(BaseDataLayer):
                 threads_data.append({
                     "id": thread.id,
                     "name": thread.name,
-                    "createdAt": thread.createdAt,
+                    "createdAt": date_serialize(thread.createdAt),
                     "metadata": thread.metadata_,
                     "tags": thread.tags,
                     "user": {
                         "id": thread.user.id,
                         "identifier": thread.user.identifier,
-                        "createdAt": thread.user.createdAt,
+                        "createdAt": date_serialize(thread.user.createdAt),
                         "metadata": thread.user.metadata_
                     },
                     "steps": [{
@@ -515,9 +514,9 @@ class SqlDataLayer(BaseDataLayer):
                         "input": step.input,
                         "output": step.output,
                         "metadata": step.metadata_,
-                        "createdAt": step.created_at.isoformat() if step.created_at else None,
-                        "start": step.start_time.isoformat() if step.start_time else None,
-                        "end": step.end_time.isoformat() if step.end_time else None,
+                        "createdAt": date_serialize(step.created_at),
+                        "start": date_serialize(step.start_time),
+                        "end": date_serialize(step.end_time),
                     } for step in steps],
                     "elements": [{
                         "id": element.id,
@@ -581,3 +580,10 @@ class SqlDataLayer(BaseDataLayer):
 
             session.add(thread)
             await session.commit()
+
+
+def date_serialize(date: datetime) -> str:
+    if date is None:
+        return None
+
+    return date.isoformat()

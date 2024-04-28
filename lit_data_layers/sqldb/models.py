@@ -44,7 +44,7 @@ class PersistedUserModel(Base):
 
     id = Column(String, primary_key=True)
     identifier = Column(String, nullable=False)
-    createdAt = Column(String, nullable=False)
+    createdAt = Column(DateTime(timezone=True), nullable=False)
     metadata_ = Column(JSON)  # Using JSON field for metadata
 
     def __repr__(self):
@@ -72,7 +72,7 @@ class ThreadModel(Base):
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=True)
-    createdAt = Column(String, nullable=False)
+    createdAt = Column(DateTime(timezone=True), nullable=False)
     metadata_ = Column(JSON)
     user_id = Column(String, ForeignKey('users.id'), nullable=True)
     tags = Column(JSON)
@@ -100,9 +100,9 @@ class StepModel(Base):
     input = Column(Text)
     output = Column(Text)
     metadata_ = Column(JSON)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    start_time = Column(DateTime)
-    end_time = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=lambda : datetime.now(timezone.utc))
+    start_time = Column(DateTime(timezone=True))
+    end_time = Column(DateTime(timezone=True))
 
     # Relationships
     thread = relationship("ThreadModel", back_populates="steps")

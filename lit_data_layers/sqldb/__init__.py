@@ -46,7 +46,7 @@ class SqlDataLayer(BaseDataLayer):
         async with self.AsyncSession() as session:
             return session.begin
 
-    async def get_user(self, identifier: str) -> Optional["PersistedUser"]:
+    async def get_user(self, identifier: str, no_create=False) -> Optional["PersistedUser"]:
         """
         Retrieve a user by their identifier.
 
@@ -68,9 +68,14 @@ class SqlDataLayer(BaseDataLayer):
                     metadata=user_model.metadata_ or {}
                 )
 
-        return await self.create_user(
-            user=User(identifier=identifier)
-        )
+        if not no_create:
+            await self.create_user(
+                user=User(identifier=identifier)
+            )
+
+            return self.get_user(identifier, no_create=True)
+        else:
+            return None
 
     async def create_user(self, user: "User") -> Optional["PersistedUser"]:
         """
@@ -247,14 +252,6 @@ class SqlDataLayer(BaseDataLayer):
         :return: A dictionary with the created step's details.
         """
         async with self.AsyncSession() as session:
-            # Convert string timestamps to datetime objects
-            created_at = datetime.fromisoformat(step_dict.get("createdAt").replace("Z", "+00:00")) if step_dict.get(
-                "createdAt") else None
-            start_time = datetime.fromisoformat(step_dict.get("start").replace("Z", "+00:00")) if step_dict.get(
-                "start") else None
-            end_time = datetime.fromisoformat(step_dict.get("end").replace("Z", "+00:00")) if step_dict.get(
-                "end") else None
-
             new_step = StepModel(
                 id=step_dict["id"],
                 thread_id=step_dict["threadId"],
@@ -542,7 +539,6 @@ class SqlDataLayer(BaseDataLayer):
             ).to_dict()
 
             response = PaginatedResponse(data=threads_data, pageInfo=page_info)
-            print(response)
             return response
 
     async def update_thread(self, thread_id: str, name: Optional[str] = None, user_id: Optional[str] = None,

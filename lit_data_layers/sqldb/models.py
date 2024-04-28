@@ -55,7 +55,7 @@ class Feedback(Base):
     __tablename__ = 'feedback'
 
     id = Column(Integer, primary_key=True)
-    for_id = Column(String)
+    for_id = Column(String, ForeignKey('steps.id'), nullable=False)
     value = Column(String)
     strategy = Column(String, default='BINARY')
     comment = Column(String, nullable=True)
@@ -64,7 +64,7 @@ class Feedback(Base):
         return f"<Feedback(id={self.id}, for_id='{self.for_id}')>"
 
     # Relationship to StepModel
-    # step = relationship("StepModel", back_populates="feedback")
+    step = relationship("StepModel", back_populates="feedback")
 
 
 class ThreadModel(Base):
@@ -106,6 +106,7 @@ class StepModel(Base):
 
     # Relationships
     thread = relationship("ThreadModel", back_populates="steps")
+    feedback = relationship("Feedback", back_populates="step")
 
     def __repr__(self):
         return f"<StepModel(id='{self.id}', name='{self.name}', type='{self.type}')>"

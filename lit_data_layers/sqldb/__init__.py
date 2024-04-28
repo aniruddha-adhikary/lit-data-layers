@@ -68,7 +68,10 @@ class SqlDataLayer(BaseDataLayer):
                     metadata=user_model.metadata_
                 )
 
-            return None
+            else:
+                return self.create_user(
+                    user=User(identifier=identifier)
+                )
 
     async def create_user(self, user: "User") -> Optional["PersistedUser"]:
         """
@@ -124,7 +127,6 @@ class SqlDataLayer(BaseDataLayer):
                     where(FeedbackModel.id == feedback.id).
                     values(
                         comment=feedback.comment,
-                        strategy=feedback.strategy,
                         value=feedback.value
                     )
                 )
@@ -136,7 +138,6 @@ class SqlDataLayer(BaseDataLayer):
                     for_id=feedback.forId,
                     value=feedback.value,
                     comment=feedback.comment,
-                    strategy=feedback.strategy,
                 )
                 session.add(new_feedback)
                 await session.commit()
@@ -258,6 +259,7 @@ class SqlDataLayer(BaseDataLayer):
             new_step = StepModel(
                 id=step_dict["id"],
                 thread_id=step_dict["threadId"],
+                parent_id=step_dict.get("parentId"),
                 name=step_dict["name"],
                 type=step_dict["type"],
                 input=step_dict.get("input"),
@@ -392,6 +394,7 @@ class SqlDataLayer(BaseDataLayer):
                     "steps": [{
                         "id": step.id,
                         "threadId": step.thread_id,
+                        "parentId": step.parent_id,
                         "name": step.name,
                         "type": step.type,
                         "input": step.input,
@@ -461,8 +464,8 @@ class SqlDataLayer(BaseDataLayer):
         """
         async with self.AsyncSession() as session:
             query = select(ThreadModel).options(selectinload(ThreadModel.user)).join(PersistedUserModel)
-            if filters.userIdentifier:
-                query = query.where(PersistedUserModel.identifier == filters.userIdentifier)
+            if filters.userId:
+                query = query.where(PersistedUserModel.id == filters.userId)
             if filters.search:
                 query = query.where(ThreadModel.name.ilike(f'%{filters.search}%'))
             if filters.feedback is not None:
@@ -535,6 +538,7 @@ class SqlDataLayer(BaseDataLayer):
 
             page_info = PageInfo(
                 hasNextPage=len(threads) == pagination.first,
+                startCursor=threads[0].id if threads else None,
                 endCursor=threads[-1].id if threads else None
             ).to_dict()
 

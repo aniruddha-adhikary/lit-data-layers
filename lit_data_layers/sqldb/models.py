@@ -94,6 +94,7 @@ class StepModel(Base):
 
     id = Column(String, primary_key=True)
     thread_id = Column(String, ForeignKey('threads.id'), nullable=False)
+    parent_id = Column(String, nullable=True, default=None)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
     input = Column(Text)

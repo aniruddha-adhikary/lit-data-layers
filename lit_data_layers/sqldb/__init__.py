@@ -23,11 +23,12 @@ from .models import Base, PersistedUserModel, ElementModel, ThreadModel, StepMod
 class SqlDataLayer(BaseDataLayer):
     def __init__(self):
         self.database_url = os.environ.get('LIT_DATABASE_URL')
+        is_debugging = os.environ.get('LIT_DATABASE_DEBUG_MODE', default='').lower().strip() == 'true'
 
         if not self.database_url:
             raise EnvironmentError('LIT_DATABASE_URL is not defined in the environment.')
 
-        self.engine = create_async_engine(self.database_url, echo=True)
+        self.engine = create_async_engine(self.database_url, echo=is_debugging)
         self.AsyncSession = sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
         )

@@ -1,5 +1,11 @@
 # lit-data-layers
 
+# 🔴 NOW HAVE OFFICIAL SUPPORT FOR PostgreSQL DB 🔴
+
+👉 https://docs.chainlit.io/data-persistence/custom 👈
+
+> THIS PROJECT IS NOW DEAD!
+
 Provides [Custom Data Layer](https://docs.chainlit.io/data-persistence/custom) for Chainlit apps.
 Supports multiple databases and data stores.
 
